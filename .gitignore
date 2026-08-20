@@ -34,7 +34,6 @@ venv.bak/
 # AgentScope artifacts
 agentscope.json
 .agent/runs/
-.scratch/
 
 # Testing & Coverage
 .pytest_cache/
