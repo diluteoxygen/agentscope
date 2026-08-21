@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +21,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install strace & tools
+      - name: Install system dependencies (strace, gcc)
         run: |
           sudo apt-get update
-          sudo apt-get install -y strace
+          sudo apt-get install -y strace gcc
 
-      - name: Install dependencies
+      - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
 
-      - name: Run Tests
+      - name: Run Test Suite
         run: |
-          pytest -v tests/
+          PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Test AgentScope CLI Workflow
+        run: |
+          agentscope run --summary -- echo "Testing AgentScope CI Execution"
+          agentscope baseline --input agentscope.json
+          agentscope verify --candidate agentscope.json
+          agentscope view agentscope.json --html report.html
+          agentscope benchmark
