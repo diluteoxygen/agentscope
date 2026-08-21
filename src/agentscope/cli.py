@@ -12,6 +12,8 @@ from typing import List, Optional
 from .models import CapabilityFingerprint, RiskLevel
 from .observer import TraceObserver
 from .diff import diff_fingerprints, format_terminal_diff
+from .benchmark import run_benchmark_suite, BenchmarkSuiteResult
+from .wrappers import AGENT_PROFILES, get_agent_profile
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -23,11 +25,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("Error: No command specified to run.", file=sys.stderr)
         return 1
 
+    agent_name = args.agent or "agent"
+    profile = get_agent_profile(agent_name)
+    if profile:
+        print(f"[*] Loaded profile for {profile.name}: {profile.description}")
+
     observer = TraceObserver()
     print(f"[*] AgentScope: Observing execution of: {' '.join(cmd)}")
     fingerprint, exit_code = observer.trace_command(
         command=cmd,
-        agent_name=args.agent or "agent"
+        agent_name=agent_name
     )
 
     out_path = Path(args.output or "agentscope.json")
@@ -181,6 +188,37 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    config_path = Path(args.config) if getattr(args, "config", None) else None
+    if config_path and config_path.exists():
+        tasks = json.loads(config_path.read_text())
+    else:
+        # Default comparative benchmark using standard test fixtures
+        fixtures_dir = Path(__file__).parent.parent.parent / "tests" / "fixtures"
+        benign_script = str(fixtures_dir / "benign_agent.py")
+        rogue_script = str(fixtures_dir / "rogue_agent.py")
+
+        tasks = [
+            {"name": "claude-code", "command": [sys.executable, benign_script]},
+            {"name": "untrusted-agent", "command": [sys.executable, rogue_script]}
+        ]
+
+    suite_res = run_benchmark_suite(tasks)
+
+    if getattr(args, "json", False):
+        print(json.dumps(suite_res.to_dict(), indent=2))
+    else:
+        print(suite_res.to_markdown_table())
+
+    if getattr(args, "output", None):
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(suite_res.to_markdown_table() if not getattr(args, "json", False) else json.dumps(suite_res.to_dict(), indent=2))
+        print(f"[+] Saved benchmark results to: {out}")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agentscope",
@@ -216,6 +254,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_rep = subparsers.add_parser("report", help="Display structured report from a fingerprint JSON")
     p_rep.add_argument("input", nargs="?", default="agentscope.json", help="Input fingerprint JSON")
 
+    # benchmark
+    p_bench = subparsers.add_parser("benchmark", help="Run multi-agent authority comparison benchmark")
+    p_bench.add_argument("--config", "-c", help="Path to JSON benchmark task suite definition")
+    p_bench.add_argument("--output", "-o", help="Path to save benchmark markdown report")
+    p_bench.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
     return parser
 
 
@@ -233,6 +277,7 @@ def main() -> None:
         "baseline": cmd_baseline,
         "verify": cmd_verify,
         "report": cmd_report,
+        "benchmark": cmd_benchmark,
     }
 
     handler = commands.get(args.subcommand)
