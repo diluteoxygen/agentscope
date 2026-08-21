@@ -22,7 +22,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Environments & Secrets
+# Environments, Configurations & Secrets
+.config/
 .env
 .env.*
 *.env
@@ -32,6 +33,7 @@ MANIFEST
 *.pem
 credentials*
 auth.json
+github.json
 github_creds*
 .venv
 env/
@@ -40,9 +42,11 @@ ENV/
 env.bak/
 venv.bak/
 
-# AgentScope artifacts
+# AgentScope artifacts & logs
 agentscope.json
 .agent/runs/
+*.log
+.cache/
 
 # Testing & Coverage
 .pytest_cache/
