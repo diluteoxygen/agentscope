@@ -11,35 +11,47 @@ from .models import Capabilities, FilesystemCapabilities
 
 # System noise paths to exclude from general authority fingerprinting
 SYSTEM_NOISE_PATTERNS = [
-    re.compile(r"^/lib(/|$)"),
-    re.compile(r"^/usr/lib(/|$)"),
-    re.compile(r"^/usr/share/locale(/|$)"),
-    re.compile(r"^/etc/ld\.so"),
-    re.compile(r"^/etc/fonts(/|$)"),
-    re.compile(r"^/dev/(null|urandom|zero|tty|pts)"),
-    re.compile(r"^/proc/(self|$$|[0-9]+)/(stat|status|cmdline|environ|maps|fd)"),
+    re.compile(r"^/lib(?:64)?(/|$)"),
+    re.compile(r"^/usr/lib(?:64)?(/|$)"),
+    re.compile(r"^/usr/share/(?:locale|zoneinfo|mime|doc)(/|$)"),
+    re.compile(r"^/etc/(?:ld\.so|fonts|localtime|timezone|magic|mime\.types)"),
+    re.compile(r"^/dev/(?:null|urandom|random|zero|tty|pts)"),
+    re.compile(r"^/proc/(?:self|$$|[0-9]+)/(?:stat|status|cmdline|environ|maps|fd|task)"),
+    re.compile(r"^/proc/(?:cpuinfo|meminfo|version|sys)"),
+    re.compile(r"^/sys/(?:devices|bus|class|fs)(/|$)"),
 ]
 
-# Sensitive paths and env patterns
-SENSITIVE_PATH_PATTERNS = [
-    (re.compile(r"(\.ssh/|\.ssh$)"), "SSH Keys & Configuration"),
+# Sensitive paths and classifications
+SENSITIVE_PATH_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"(\.ssh/|\.ssh$|id_rsa|id_ed25519)"), "SSH Keys & Configuration"),
     (re.compile(r"(\.aws/|\.aws$)"), "AWS Credentials"),
-    (re.compile(r"(\.config/gh/|\.git-credentials)"), "Git / GitHub Credentials"),
+    (re.compile(r"(\.azure/|\.gcp/|\.config/gcloud/)"), "Cloud Provider Credentials"),
+    (re.compile(r"(\.config/gh/|\.git-credentials|\.netrc)"), "Git / GitHub Credentials"),
+    (re.compile(r"(\.npmrc|\.pypirc)"), "Package Registry Credentials"),
     (re.compile(r"(\.env$|\.env\.)"), "Environment Secrets File"),
-    (re.compile(r"(\.kube/config)"), "Kubernetes Credentials"),
+    (re.compile(r"(\.kube/config|\.docker/config\.json)"), "Infrastructure & Container Credentials"),
     (re.compile(r"(\.gnupg/)"), "GPG Keyring"),
-    (re.compile(r"(\.github/workflows/)"), "CI/CD Workflow Definitions"),
+    (re.compile(r"(\.github/workflows/|\.gitlab-ci\.yml|\.circleci/)"), "CI/CD Workflow Definitions"),
+    (re.compile(r"\.(pem|key)$"), "Private Cryptographic Key"),
 ]
 
-SENSITIVE_ENV_VARS = {
+SENSITIVE_ENV_VARS: Set[str] = {
     "GITHUB_TOKEN",
     "GH_TOKEN",
+    "GITLAB_TOKEN",
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
     "STRIPE_API_KEY",
+    "STRIPE_SECRET_KEY",
+    "SLACK_BOT_TOKEN",
+    "DISCORD_TOKEN",
     "DATABASE_URL",
+    "POSTGRES_PASSWORD",
+    "REDIS_URL",
     "SSH_AUTH_SOCK",
 }
 
@@ -120,7 +132,8 @@ class Normalizer:
         commands: Set[str] = set()
         for cmd in raw_commands:
             cmd_name = Path(cmd).name
-            commands.add(cmd_name)
+            if cmd_name:
+                commands.add(cmd_name)
 
         network: Set[str] = set()
         for dest in raw_network:

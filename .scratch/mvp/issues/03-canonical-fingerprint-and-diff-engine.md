@@ -4,11 +4,11 @@
 
 **Blocked by:** 02: Event Normalization and Sensitive Resource Classification
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Implement canonical sorting and deduplication across all capability arrays in `CapabilityFingerprint`.
-- [ ] Implement `diff_fingerprints(baseline, candidate)` returning a `CapabilityDelta`.
-- [ ] Calculate `RiskLevel` and human-readable `risk_reasons` based on newly introduced capabilities.
-- [ ] Format human-readable colored ASCII terminal diffs for developers.
-- [ ] Format machine-readable JSON output for automated tooling.
-- [ ] Comprehensive unit tests for diff calculations and risk ratings.
+- [x] Implement canonical sorting and deduplication across all capability arrays in `CapabilityFingerprint`.
+- [x] Implement `diff_fingerprints(baseline, candidate)` returning a `CapabilityDelta`.
+- [x] Calculate `RiskLevel` and human-readable `risk_reasons` based on newly introduced capabilities.
+- [x] Format human-readable colored ASCII terminal diffs for developers.
+- [x] Format machine-readable JSON output for automated tooling.
+- [x] Comprehensive unit tests for diff calculations and risk ratings.

@@ -4,9 +4,9 @@
 
 **Blocked by:** 04: CLI Workflow and CI Baseline Verification Engine
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Create a benign agent scenario fixture (reading source, writing unit test, running test runner).
-- [ ] Create a rogue agent scenario fixture (reading sensitive config, invoking unauthorized network tool, modifying CI).
-- [ ] Write integration test verifying that `agentscope baseline` accepts the benign run and `agentscope verify` fails the rogue run with `CRITICAL` risk rating.
-- [ ] Benchmark execution overhead across multi-process agent simulations.
+- [x] Create a benign agent scenario fixture (reading source, writing unit test, running test runner).
+- [x] Create a rogue agent scenario fixture (reading sensitive config, invoking unauthorized network tool, modifying CI).
+- [x] Write integration test verifying that `agentscope baseline` accepts the benign run and `agentscope verify` fails the rogue run with `CRITICAL` risk rating.
+- [x] Benchmark execution overhead across multi-process agent simulations.

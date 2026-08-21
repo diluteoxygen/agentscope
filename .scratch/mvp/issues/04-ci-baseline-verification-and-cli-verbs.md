@@ -4,11 +4,11 @@
 
 **Blocked by:** 03: Canonical Capability Fingerprint and Diff Engine
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Implement `agentscope run -- <command>` writing `agentscope.json`.
-- [ ] Implement `agentscope diff <fp1> <fp2> [--json]`.
-- [ ] Implement `agentscope baseline [--input <path>] [--output <path>]` writing `.agent/authority-baseline.json`.
-- [ ] Implement `agentscope verify [--candidate <path>] [--baseline <path>]` with exit code gating.
-- [ ] Integrate CLI argument parser with detailed `--help` documentation and error handling.
-- [ ] End-to-end integration tests covering all four CLI verbs.
+- [x] Implement `agentscope run -- <command>` writing `agentscope.json`.
+- [x] Implement `agentscope diff <fp1> <fp2> [--json]`.
+- [x] Implement `agentscope baseline [--input <path>] [--output <path>]` writing `.agent/authority-baseline.json`.
+- [x] Implement `agentscope verify [--candidate <path>] [--baseline <path>]` with exit code gating.
+- [x] Integrate CLI argument parser with detailed `--help` documentation and error handling.
+- [x] End-to-end integration tests covering all four CLI verbs.

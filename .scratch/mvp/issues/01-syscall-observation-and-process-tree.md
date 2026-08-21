@@ -4,11 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Wrap target commands under `strace` with recursive multi-process tracking (`-f`).
-- [ ] Intercept and parse `open`, `openat`, `creat`, `unlink`, `unlinkat` for read/write file operations.
-- [ ] Intercept and parse `execve`, `execveat` for all spawned binaries and sub-shells.
-- [ ] Intercept and parse `connect` syscalls for IPv4 and IPv6 network destinations.
-- [ ] Inspect environment variables present during the trace session.
-- [ ] Fallback gracefully when `strace` is absent or when running in constrained environments.
+- [x] Wrap target commands under `strace` with recursive multi-process tracking (`-f`).
+- [x] Intercept and parse `open`, `openat`, `creat`, `unlink`, `unlinkat` for read/write file operations.
+- [x] Intercept and parse `execve`, `execveat` for all spawned binaries and sub-shells.
+- [x] Intercept and parse `connect` syscalls for IPv4 and IPv6 network destinations.
+- [x] Inspect environment variables present during the trace session.
+- [x] Fallback gracefully when `strace` is absent or when running in constrained environments.

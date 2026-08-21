@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Linux Process & Syscall Observation Engine
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Normalize paths into `./<relative-path>` for workspace items, `~/<path>` for home items, and absolute paths for others.
-- [ ] Filter out OS-level boilerplate noise (`/lib/`, `/usr/lib/`, `/etc/ld.so.*`, `/proc/self/maps`).
-- [ ] Implement regex-based sensitive file classification for SSH keys, AWS credentials, git tokens, and CI workflows.
-- [ ] Extract and categorize sensitive environment variables (`GITHUB_TOKEN`, `OPENAI_API_KEY`, etc.).
-- [ ] Normalize command names to executable basenames (`/usr/bin/curl` -> `curl`).
-- [ ] Unit tests for all normalization rules and edge cases.
+- [x] Normalize paths into `./<relative-path>` for workspace items, `~/<path>` for home items, and absolute paths for others.
+- [x] Filter out OS-level boilerplate noise (`/lib/`, `/usr/lib/`, `/etc/ld.so.*`, `/proc/self/maps`).
+- [x] Implement regex-based sensitive file classification for SSH keys, AWS credentials, git tokens, and CI workflows.
+- [x] Extract and categorize sensitive environment variables (`GITHUB_TOKEN`, `OPENAI_API_KEY`, etc.).
+- [x] Normalize command names to executable basenames (`/usr/bin/curl` -> `curl`).
+- [x] Unit tests for all normalization rules and edge cases.

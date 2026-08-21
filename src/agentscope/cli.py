@@ -15,14 +15,18 @@ from .diff import diff_fingerprints, format_terminal_diff
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    if not args.command:
+    cmd = args.command
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+
+    if not cmd:
         print("Error: No command specified to run.", file=sys.stderr)
         return 1
 
     observer = TraceObserver()
-    print(f"[*] AgentScope: Observing execution of: {' '.join(args.command)}")
+    print(f"[*] AgentScope: Observing execution of: {' '.join(cmd)}")
     fingerprint, exit_code = observer.trace_command(
-        command=args.command,
+        command=cmd,
         agent_name=args.agent or "agent"
     )
 
@@ -31,11 +35,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     out_path.write_text(fingerprint.to_json())
 
     print(f"[+] Capability Fingerprint saved to: {out_path}")
-    print(f"    - Files Read:    {len(fingerprint.capabilities.filesystem.read)}")
-    print(f"    - Files Written: {len(fingerprint.capabilities.filesystem.write)}")
-    print(f"    - Commands:      {len(fingerprint.capabilities.commands)}")
-    print(f"    - Network Sockets:{len(fingerprint.capabilities.network)}")
-    print(f"    - Secrets:       {len(fingerprint.capabilities.secrets)}")
+    print(f"    - Files Read:     {len(fingerprint.capabilities.filesystem.read)}")
+    print(f"    - Files Written:  {len(fingerprint.capabilities.filesystem.write)}")
+    print(f"    - Commands:       {len(fingerprint.capabilities.commands)}")
+    print(f"    - Network Sockets: {len(fingerprint.capabilities.network)}")
+    print(f"    - Secrets:        {len(fingerprint.capabilities.secrets)}")
 
     return exit_code
 
@@ -75,7 +79,6 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     content = in_path.read_text()
-    # Validate JSON
     fp = CapabilityFingerprint.from_json(content)
     out_path.write_text(fp.to_json())
 

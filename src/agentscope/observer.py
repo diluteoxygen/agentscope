@@ -11,17 +11,95 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Set, Optional, Tuple
+from typing import List, Set, Optional, Tuple, Dict, Any
 
 from .models import CapabilityFingerprint, RunMetadata
 from .normalizer import Normalizer
 
-# Regex parsers for common strace outputs
-RE_OPEN = re.compile(r'(?:open|openat)\([^,]*,\s*"([^"]+)",\s*([^,\)]+)')
+# Regex patterns for strace parsing
+RE_PID_PREFIX = re.compile(r"^(?:\[pid\s+\d+\]|\d+)\s+")
+
+RE_OPEN = re.compile(r'(?:open|openat|openat2)\((?:[^,]*,)?\s*"([^"]+)",\s*([^,\)]+)')
 RE_CREAT = re.compile(r'creat\("([^"]+)"')
-RE_UNLINK = re.compile(r'unlink(?:at)?\([^,]*,\s*"([^"]+)"')
-RE_EXEC = re.compile(r'execve(?:at)?\([^,]*,\s*"([^"]+)"')
-RE_CONNECT = re.compile(r'connect\([^,]*,\s*\{sa_family=AF_INET(?:6)?,\s*sin(?:6)?_port=htons\(([0-9]+)\),\s*sin(?:6)?_addr=inet_addr\("([^"]+)"\)')
+RE_UNLINK = re.compile(r'unlink(?:at)?\((?:[^,]*,)?\s*"([^"]+)"')
+RE_RENAME = re.compile(r'rename(?:at|at2)?\((?:[^,]*,)?\s*"([^"]+)",\s*(?:[^,]*,)?\s*"([^"]+)"')
+RE_EXEC = re.compile(r'execve(?:at)?\((?:[^,]*,)?\s*"([^"]+)"')
+
+RE_CONNECT_IPV4 = re.compile(
+    r'connect\([^,]*,\s*\{sa_family=AF_INET,\s*sin_port=htons\(([0-9]+)\),\s*sin_addr=inet_addr\("([^"]+)"\)'
+)
+RE_CONNECT_IPV6 = re.compile(
+    r'connect\([^,]*,\s*\{sa_family=AF_INET6,\s*sin6_port=htons\(([0-9]+)\),.*?"([^"]+)"'
+)
+
+
+def parse_strace_output(
+    lines: List[str]
+) -> Tuple[Set[str], Set[str], Set[str], Set[str]]:
+    """
+    Parses strace output lines into raw sets of reads, writes, commands, and network endpoints.
+    """
+    raw_reads: Set[str] = set()
+    raw_writes: Set[str] = set()
+    raw_commands: Set[str] = set()
+    raw_network: Set[str] = set()
+
+    for raw_line in lines:
+        line = RE_PID_PREFIX.sub("", raw_line.strip())
+
+        # Execve / Execveat
+        m_exec = RE_EXEC.search(line)
+        if m_exec:
+            raw_commands.add(m_exec.group(1))
+
+        # Open / Openat
+        m_open = RE_OPEN.search(line)
+        if m_open:
+            path, flags = m_open.group(1), m_open.group(2)
+            if any(w in flags for w in ["O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND"]):
+                raw_writes.add(path)
+            else:
+                raw_reads.add(path)
+
+        # Creat
+        m_creat = RE_CREAT.search(line)
+        if m_creat:
+            raw_writes.add(m_creat.group(1))
+
+        # Unlink / Unlinkat
+        m_unlink = RE_UNLINK.search(line)
+        if m_unlink:
+            raw_writes.add(m_unlink.group(1))
+
+        # Rename / Renameat
+        m_rename = RE_RENAME.search(line)
+        if m_rename:
+            raw_reads.add(m_rename.group(1))
+            raw_writes.add(m_rename.group(2))
+
+        # Connect IPv4
+        m_conn4 = RE_CONNECT_IPV4.search(line)
+        if m_conn4:
+            port, ip = m_conn4.group(1), m_conn4.group(2)
+            if ip not in ("127.0.0.1", "0.0.0.0"):
+                try:
+                    host = socket.gethostbyaddr(ip)[0]
+                    raw_network.add(f"{host}:{port}")
+                except Exception:
+                    raw_network.add(f"{ip}:{port}")
+
+        # Connect IPv6
+        m_conn6 = RE_CONNECT_IPV6.search(line)
+        if m_conn6:
+            port, ip = m_conn6.group(1), m_conn6.group(2)
+            if ip not in ("::1", "::"):
+                try:
+                    host = socket.gethostbyaddr(ip)[0]
+                    raw_network.add(f"{host}:{port}")
+                except Exception:
+                    raw_network.add(f"{ip}:{port}")
+
+    return raw_reads, raw_writes, raw_commands, raw_network
 
 
 class TraceObserver:
@@ -47,7 +125,6 @@ class TraceObserver:
         raw_network: Set[str] = set()
         raw_env: Set[str] = set()
 
-        # Add initial command
         if command:
             raw_commands.add(command[0])
 
@@ -56,7 +133,7 @@ class TraceObserver:
                 "strace",
                 "-f",
                 "-q",
-                "-e", "trace=open,openat,creat,unlink,unlinkat,execve,execveat,connect",
+                "-e", "trace=open,openat,creat,unlink,unlinkat,rename,renameat,renameat2,execve,execveat,connect",
                 "-s", "512",
                 "--",
             ] + command
@@ -73,44 +150,14 @@ class TraceObserver:
             stdout, stderr = proc.communicate()
             exit_code = proc.returncode
 
-            # Parse strace log from stderr
-            for line in stderr.splitlines():
-                # Check execve
-                m_exec = RE_EXEC.search(line)
-                if m_exec:
-                    raw_commands.add(m_exec.group(1))
-
-                # Check open/openat
-                m_open = RE_OPEN.search(line)
-                if m_open:
-                    path, flags = m_open.group(1), m_open.group(2)
-                    if any(w in flags for w in ["O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC"]):
-                        raw_writes.add(path)
-                    else:
-                        raw_reads.add(path)
-
-                # Check creat / unlink
-                m_creat = RE_CREAT.search(line)
-                if m_creat:
-                    raw_writes.add(m_creat.group(1))
-
-                m_unlink = RE_UNLINK.search(line)
-                if m_unlink:
-                    raw_writes.add(m_unlink.group(1))
-
-                # Check connect
-                m_conn = RE_CONNECT.search(line)
-                if m_conn:
-                    port, ip = m_conn.group(1), m_conn.group(2)
-                    if ip not in ("127.0.0.1", "::1", "0.0.0.0"):
-                        # Try hostname resolution
-                        try:
-                            host = socket.gethostbyaddr(ip)[0]
-                            raw_network.add(f"{host}:{port}")
-                        except Exception:
-                            raw_network.add(f"{ip}:{port}")
+            parsed_reads, parsed_writes, parsed_cmds, parsed_net = parse_strace_output(
+                stderr.splitlines()
+            )
+            raw_reads.update(parsed_reads)
+            raw_writes.update(parsed_writes)
+            raw_commands.update(parsed_cmds)
+            raw_network.update(parsed_net)
         else:
-            # Fallback direct execution if strace is missing
             proc = subprocess.run(
                 command,
                 cwd=str(self.cwd),
@@ -121,7 +168,6 @@ class TraceObserver:
 
         duration_ms = int((time.time() - start_time) * 1000)
 
-        # Inspect environment variables currently available in the session
         for env_k in os.environ.keys():
             raw_env.add(env_k)
 

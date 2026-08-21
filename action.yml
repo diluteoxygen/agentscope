@@ -1,0 +1,58 @@
+name: 'AgentScope Authority Verification'
+description: 'Verifies AI coding agent capability fingerprints against a committed baseline'
+author: 'AgentScope Contributors'
+
+inputs:
+  baseline:
+    description: 'Path to baseline capability fingerprint'
+    required: false
+    default: '.agent/authority-baseline.json'
+  candidate:
+    description: 'Path to candidate run capability fingerprint'
+    required: false
+    default: 'agentscope.json'
+  fail-on-escalation:
+    description: 'Whether to fail the CI step if new capabilities are detected'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install strace & AgentScope
+      shell: bash
+      run: |
+        sudo apt-get update && sudo apt-get install -y strace
+        python -m pip install --upgrade pip
+        pip install agentscope-forensics || pip install -e ${{ github.action_path }}
+
+    - name: Run Authority Verification
+      id: verify
+      shell: bash
+      run: |
+        set +e
+        OUTPUT=$(python -m agentscope.cli verify --baseline "${{ inputs.baseline }}" --candidate "${{ inputs.candidate }}" 2>&1)
+        EXIT_CODE=$?
+
+        echo "$OUTPUT"
+
+        if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+          echo "## AgentScope Authority Verification" >> $GITHUB_STEP_SUMMARY
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✅ **PASS**: Agent stayed within baseline authority profile." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **FAIL**: Unauthorized capability escalation detected." >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+
+        if [ "${{ inputs.fail-on-escalation }}" = "true" ] && [ $EXIT_CODE -ne 0 ]; then
+          exit 1
+        fi
