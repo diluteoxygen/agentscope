@@ -93,22 +93,40 @@ With an agent profile and immediate summary output:
 agentscope run --agent claude --summary -- claude code
 ```
 
-agentscope executes the command, traces all spawned child processes and socket connections, and writes `agentscope.json` to the current working directory.
+To export an interactive HTML visual report directly:
+
+```bash
+agentscope run --html report.html -- claude code
+```
+
+agentscope executes the command, traces all spawned child processes, socket connections, and in-process `getenv()` calls via an `LD_PRELOAD` C shim, writing `agentscope.json`.
 
 ### 2. View structured capability reports
 
-Display a formatted breakdown of accessed files, commands, network endpoints, and secrets:
+Display a formatted breakdown in the terminal:
 
 ```bash
 agentscope report agentscope.json
 ```
 
+Or export a standalone interactive HTML dashboard:
+
+```bash
+agentscope view agentscope.json --html report.html
+```
+
 ### 3. Diff two runs
 
-Compare fingerprints from two separate runs:
+Compare fingerprints from two separate runs in the terminal:
 
 ```bash
 agentscope diff run-183.json run-184.json
+```
+
+To export an interactive visual diff HTML:
+
+```bash
+agentscope diff run-183.json run-184.json --html diff.html
 ```
 
 To get machine-readable output for scripts:

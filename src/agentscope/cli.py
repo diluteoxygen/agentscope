@@ -14,6 +14,7 @@ from .observer import TraceObserver
 from .diff import diff_fingerprints, format_terminal_diff
 from .benchmark import run_benchmark_suite, BenchmarkSuiteResult
 from .wrappers import AGENT_PROFILES, get_agent_profile
+from .visualizer import render_fingerprint_html, render_diff_html
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -48,6 +49,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"    - Network Sockets: {len(fingerprint.capabilities.network)}")
     print(f"    - Secrets:        {len(fingerprint.capabilities.secrets)}")
 
+    if getattr(args, "html", None):
+        html_path = Path(args.html)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(render_fingerprint_html(fingerprint, title=f"AgentScope Run: {agent_name}"))
+        print(f"[+] Saved visual HTML report to: {html_path}")
+
     if getattr(args, "summary", False):
         print("\n" + render_fingerprint_report(fingerprint))
 
@@ -70,9 +77,15 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
     delta = diff_fingerprints(fp_a, fp_b)
 
+    if getattr(args, "html", None):
+        html_path = Path(args.html)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(render_diff_html(delta, title=f"AgentScope Diff: {path_a.name} -> {path_b.name}"))
+        print(f"[+] Saved visual diff report to: {html_path}")
+
     if args.json:
         print(json.dumps(delta.to_dict(), indent=2))
-    else:
+    elif not getattr(args, "html", None):
         print(format_terminal_diff(delta, title=f"DIFF: {path_a.name} -> {path_b.name}"))
 
     return 1 if delta.has_escalations and delta.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL) else 0
@@ -184,6 +197,14 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 1
 
     fp = CapabilityFingerprint.from_json(in_path.read_text())
+
+    if getattr(args, "html", None):
+        html_path = Path(args.html)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(render_fingerprint_html(fp, title=f"AgentScope Report: {in_path.name}"))
+        print(f"[+] Saved visual HTML report to: {html_path}")
+        return 0
+
     print(render_fingerprint_report(fp))
     return 0
 
@@ -193,7 +214,6 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     if config_path and config_path.exists():
         tasks = json.loads(config_path.read_text())
     else:
-        # Default comparative benchmark using standard test fixtures
         fixtures_dir = Path(__file__).parent.parent.parent / "tests" / "fixtures"
         benign_script = str(fixtures_dir / "benign_agent.py")
         rogue_script = str(fixtures_dir / "rogue_agent.py")
@@ -231,6 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--output", "-o", help="Output path for fingerprint JSON (default: agentscope.json)")
     p_run.add_argument("--agent", "-a", default="agent", help="Agent identifier (default: agent)")
     p_run.add_argument("--summary", "-s", action="store_true", help="Print detailed report after run")
+    p_run.add_argument("--html", help="Generate standalone visual HTML report")
     p_run.add_argument("command", nargs=argparse.REMAINDER, help="The command to trace")
 
     # diff
@@ -238,6 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_diff.add_argument("file_a", help="Baseline fingerprint JSON")
     p_diff.add_argument("file_b", help="Candidate fingerprint JSON")
     p_diff.add_argument("--json", action="store_true", help="Output machine-readable JSON diff")
+    p_diff.add_argument("--html", help="Generate standalone visual HTML diff report")
 
     # baseline
     p_base = subparsers.add_parser("baseline", help="Commit a fingerprint as project baseline (.agent/authority-baseline.json)")
@@ -250,9 +272,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_ver.add_argument("--baseline", "-b", default=".agent/authority-baseline.json", help="Baseline fingerprint")
     p_ver.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
-    # report
-    p_rep = subparsers.add_parser("report", help="Display structured report from a fingerprint JSON")
-    p_rep.add_argument("input", nargs="?", default="agentscope.json", help="Input fingerprint JSON")
+    # report / view
+    for cmd_name in ["report", "view"]:
+        p_rep = subparsers.add_parser(cmd_name, help="Display structured report from a fingerprint JSON")
+        p_rep.add_argument("input", nargs="?", default="agentscope.json", help="Input fingerprint JSON")
+        p_rep.add_argument("--html", help="Generate standalone visual HTML report")
 
     # benchmark
     p_bench = subparsers.add_parser("benchmark", help="Run multi-agent authority comparison benchmark")
@@ -277,6 +301,7 @@ def main() -> None:
         "baseline": cmd_baseline,
         "verify": cmd_verify,
         "report": cmd_report,
+        "view": cmd_report,
         "benchmark": cmd_benchmark,
     }
 
