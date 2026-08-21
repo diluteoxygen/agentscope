@@ -22,8 +22,17 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Environments
+# Environments & Secrets
 .env
+.env.*
+*.env
+*.secret*
+*.token*
+*.key
+*.pem
+credentials*
+auth.json
+github_creds*
 .venv
 env/
 venv/
