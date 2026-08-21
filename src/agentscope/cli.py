@@ -18,6 +18,7 @@ from .visualizer import render_fingerprint_html, render_diff_html
 from .monitor import run_live_monitor
 from .policy import export_docker_flags, export_seccomp_profile, export_bwrap_command
 from .hooks import install_git_hooks, uninstall_git_hooks, check_git_hooks_status
+from .enforce import EnforcementEngine, EnforcementViolation
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -81,6 +82,47 @@ def cmd_monitor(args: argparse.Namespace) -> int:
     out_path.write_text(fingerprint.to_json())
 
     print(f"[+] Capability Fingerprint saved to: {out_path}")
+    return exit_code
+
+
+def cmd_enforce(args: argparse.Namespace) -> int:
+    cmd = args.command
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+
+    if not cmd:
+        print("Error: No command specified to enforce.", file=sys.stderr)
+        return 1
+
+    baseline_path = Path(args.baseline or ".agent/authority-baseline.json")
+    if not baseline_path.exists():
+        print(f"Error: Authority baseline not found at {baseline_path}. Run `agentscope baseline` first.", file=sys.stderr)
+        return 1
+
+    baseline = CapabilityFingerprint.from_json(baseline_path.read_text())
+    strict = not getattr(args, "permissive", False)
+    engine = EnforcementEngine(baseline=baseline, strict_mode=strict)
+
+    print(f"[*] AgentScope Enforcement Active: Monitoring {' '.join(cmd)}")
+    print(f"    - Baseline: {baseline_path}")
+    print(f"    - Mode:     {'STRICT (Kill on violation)' if strict else 'PERMISSIVE'}\n")
+
+    violation, exit_code = engine.enforce_command(cmd, agent_name=args.agent or "agent")
+
+    if violation:
+        print("\n" + "=" * 60)
+        print("🚨 AGENTSCOPE ENFORCEMENT ACTION: PROCESS TERMINATED!")
+        print("=" * 60)
+        print(f"  • Violation Type:   {violation.violation_type}")
+        print(f"  • Offending Target: {violation.target}")
+        if violation.pid:
+            print(f"  • Process PID:      {violation.pid}")
+        print(f"  • Syscall:          {violation.raw_syscall}")
+        print(f"  • Action:           SIGKILL sent to process group")
+        print("=" * 60 + "\n")
+        return 137
+
+    print(f"[✓] Execution completed cleanly within baseline authority bounds (exit code: {exit_code}).")
     return exit_code
 
 
@@ -358,6 +400,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_mon.add_argument("--agent", "-a", default="agent", help="Agent identifier (default: agent)")
     p_mon.add_argument("command", nargs=argparse.REMAINDER, help="The command to trace")
 
+    # enforce (Active Sandbox)
+    p_enf = subparsers.add_parser("enforce", help="Run agent under active real-time syscall enforcement (kill on violation)")
+    p_enf.add_argument("--baseline", "-b", default=".agent/authority-baseline.json", help="Path to authority baseline")
+    p_enf.add_argument("--agent", "-a", default="agent", help="Agent identifier (default: agent)")
+    p_enf.add_argument("--permissive", action="store_true", help="Log violations without terminating process")
+    p_enf.add_argument("command", nargs=argparse.REMAINDER, help="The command to enforce")
+
     # diff
     p_diff = subparsers.add_parser("diff", help="Diff two capability fingerprints")
     p_diff.add_argument("file_a", help="Baseline fingerprint JSON")
@@ -414,6 +463,7 @@ def main() -> None:
     commands = {
         "run": cmd_run,
         "monitor": cmd_monitor,
+        "enforce": cmd_enforce,
         "diff": cmd_diff,
         "baseline": cmd_baseline,
         "verify": cmd_verify,

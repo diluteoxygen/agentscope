@@ -1,12 +1,12 @@
 # agentscope
 
-agentscope traces what an AI coding agent touches during a run (files read and written, commands executed, outbound network destinations, and accessed environment variables). It writes a deterministic JSON fingerprint and lets you diff authority changes between runs or enforce an authority baseline in CI.
+agentscope traces what an AI coding agent touches during a run (files read and written, commands executed, outbound network destinations, and accessed environment variables). It writes a deterministic JSON fingerprint and lets you diff authority changes between runs, enforce an authority baseline in CI, or actively sandbox/terminate rogue processes in real-time.
 
 ## The problem
 
 Static analysis cannot predict what an autonomous agent will do once it starts executing shell commands and scripts. Most runtime agent security tools are enterprise SaaS platforms with policy engines and cloud control planes.
 
-agentscope is a local command-line tool. It runs on Linux, captures child process trees and syscalls with `strace` and `/proc`, and generates a plain JSON artifact. You can diff two runs with `agentscope diff` or fail pull requests with `agentscope verify` if an agent acquires new capabilities.
+agentscope is a local command-line tool. It runs on Linux, captures child process trees and syscalls with `strace` and `/proc`, and generates a plain JSON artifact. You can diff two runs with `agentscope diff`, enforce strict runtime process termination with `agentscope enforce`, or fail pull requests with `agentscope verify` if an agent acquires new capabilities.
 
 ## How it looks
 
@@ -99,7 +99,26 @@ To export an interactive HTML visual report directly:
 agentscope run --html report.html -- claude code
 ```
 
-### 2. Live real-time terminal TUI monitor
+### 2. Active runtime containment & enforcement
+
+Run an agent under strict real-time execution bounds. If the agent attempts to read unauthorized secrets (e.g. `~/.ssh`), write unapproved CI workflows, or spawn untrusted binaries (`curl`), AgentScope terminates the process group immediately with `SIGKILL`:
+
+```bash
+agentscope enforce --baseline .agent/authority-baseline.json -- claude code
+```
+
+```text
+============================================================
+🚨 AGENTSCOPE ENFORCEMENT ACTION: PROCESS TERMINATED!
+============================================================
+  • Violation Type:   SECRET_ACCESS
+  • Offending Target: ~/.ssh/id_rsa (SSH Keys & Configuration)
+  • Syscall:          openat(AT_FDCWD, "/home/user/.ssh/id_rsa", O_RDONLY)
+  • Action:           SIGKILL sent to process group
+============================================================
+```
+
+### 3. Live real-time terminal TUI monitor
 
 Watch an agent execute in real-time with live syscall event streaming and dynamic risk scoring:
 
@@ -107,7 +126,7 @@ Watch an agent execute in real-time with live syscall event streaming and dynami
 agentscope monitor --agent claude -- claude code
 ```
 
-### 3. View structured capability reports
+### 4. View structured capability reports
 
 Display a formatted breakdown in the terminal:
 
@@ -121,7 +140,7 @@ Or export a standalone interactive HTML dashboard:
 agentscope view agentscope.json --html report.html
 ```
 
-### 4. Diff two runs
+### 5. Diff two runs
 
 Compare fingerprints from two separate runs in the terminal:
 
@@ -141,7 +160,7 @@ To get machine-readable output for scripts:
 agentscope diff run-183.json run-184.json --json
 ```
 
-### 5. Establish a baseline
+### 6. Establish a baseline
 
 Save the current fingerprint as your repository's committed baseline:
 
@@ -151,7 +170,7 @@ agentscope baseline
 
 This writes `.agent/authority-baseline.json`. Check this file into git.
 
-### 6. Verify in CI
+### 7. Verify in CI
 
 Verify a new run against the committed baseline:
 
@@ -183,7 +202,7 @@ RISK DELTA: CRITICAL
 ============================================================
 ```
 
-### 7. Export hardened sandbox policies
+### 8. Export hardened sandbox policies
 
 Convert a baseline fingerprint into kernel-level confinement rules:
 
@@ -198,7 +217,7 @@ agentscope export-policy --format seccomp --output seccomp.json
 agentscope export-policy --format bwrap
 ```
 
-### 8. Install Git safety hooks
+### 9. Install Git safety hooks
 
 Automatically block commits or pushes when unauthorized agent capability escalations are detected:
 
@@ -213,7 +232,7 @@ agentscope hook status
 agentscope hook uninstall
 ```
 
-### 9. Run authority comparison benchmarks
+### 10. Run authority comparison benchmarks
 
 Compare the authority footprint of multiple agents on standardized tasks:
 
