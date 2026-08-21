@@ -7,10 +7,16 @@ import tempfile
 import sys
 from pathlib import Path
 from agentscope.observer import TraceObserver, parse_strace_output
+from agentscope.sni import extract_tls_sni
+from tests.test_sni import build_synthetic_client_hello
 
 
 class TestObserver(unittest.TestCase):
     def test_parse_strace_synthetic_lines(self):
+        # Build synthetic TLS Client Hello for registry.npmjs.org
+        raw_tls = build_synthetic_client_hello("registry.npmjs.org")
+        escaped_tls = "".join(f"\\x{b:02x}" for b in raw_tls)
+
         lines = [
             '[pid 1001] execve("/usr/bin/git", ["git", "status"], 0x7ffd...) = 0',
             '[pid 1001] openat(AT_FDCWD, "/repo/src/main.py", O_RDONLY|O_CLOEXEC) = 3',
@@ -21,6 +27,7 @@ class TestObserver(unittest.TestCase):
             '[pid 1003] rename("/repo/temp.txt", "/repo/final.txt") = 0',
             '[pid 1004] connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("140.82.121.4")}, 16) = 0',
             '[pid 1005] connect(3, {sa_family=AF_INET6, sin6_port=htons(8080), inet_pton(AF_INET6, "2606:4700::6810:db53", &sin6_addr)}, 28) = 0',
+            f'[pid 1006] sendto(3, "{escaped_tls}", 512, 0, NULL, 0) = 512',
         ]
 
         reads, writes, cmds, net = parse_strace_output(lines)
@@ -35,6 +42,7 @@ class TestObserver(unittest.TestCase):
         self.assertIn("/repo/final.txt", writes)
         self.assertTrue(any("443" in n for n in net))
         self.assertTrue(any("8080" in n for n in net))
+        self.assertIn("registry.npmjs.org:443", net)
 
     def test_live_trace_execution(self):
         with tempfile.TemporaryDirectory() as tmpdir:

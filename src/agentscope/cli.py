@@ -41,6 +41,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"    - Network Sockets: {len(fingerprint.capabilities.network)}")
     print(f"    - Secrets:        {len(fingerprint.capabilities.secrets)}")
 
+    if getattr(args, "summary", False):
+        print("\n" + render_fingerprint_report(fingerprint))
+
     return exit_code
 
 
@@ -120,6 +123,64 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 1 if delta.has_escalations else 0
 
 
+def render_fingerprint_report(fp: CapabilityFingerprint) -> str:
+    lines = [
+        "AUTHORITY FINGERPRINT REPORT",
+        "─" * 40,
+    ]
+    if fp.metadata:
+        lines.append(f"Agent:     {fp.metadata.agent}")
+        lines.append(f"Command:   {' '.join(fp.metadata.command)}")
+        lines.append(f"Duration:  {fp.metadata.duration_ms}ms")
+        lines.append(f"Exit Code: {fp.metadata.exit_code}")
+        lines.append("─" * 40)
+
+    caps = fp.capabilities
+    if caps.secrets:
+        lines.append("SECRETS ACCESSED:")
+        for s in caps.secrets:
+            lines.append(f"  • {s} ⚠")
+        lines.append("")
+
+    if caps.filesystem.write:
+        lines.append(f"FILES WRITTEN ({len(caps.filesystem.write)}):")
+        for w in caps.filesystem.write:
+            lines.append(f"  • {w}")
+        lines.append("")
+
+    if caps.filesystem.read:
+        lines.append(f"FILES READ ({len(caps.filesystem.read)}):")
+        for r in caps.filesystem.read:
+            lines.append(f"  • {r}")
+        lines.append("")
+
+    if caps.commands:
+        lines.append(f"COMMANDS EXECUTED ({len(caps.commands)}):")
+        for c in caps.commands:
+            lines.append(f"  • {c}")
+        lines.append("")
+
+    if caps.network:
+        lines.append(f"NETWORK ENDPOINTS ({len(caps.network)}):")
+        for n in caps.network:
+            lines.append(f"  • {n}")
+        lines.append("")
+
+    lines.append("─" * 40)
+    return "\n".join(lines)
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    in_path = Path(args.input or "agentscope.json")
+    if not in_path.exists():
+        print(f"Error: Fingerprint not found: {in_path}", file=sys.stderr)
+        return 1
+
+    fp = CapabilityFingerprint.from_json(in_path.read_text())
+    print(render_fingerprint_report(fp))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agentscope",
@@ -131,6 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run = subparsers.add_parser("run", help="Trace an agent command and generate agentscope.json")
     p_run.add_argument("--output", "-o", help="Output path for fingerprint JSON (default: agentscope.json)")
     p_run.add_argument("--agent", "-a", default="agent", help="Agent identifier (default: agent)")
+    p_run.add_argument("--summary", "-s", action="store_true", help="Print detailed report after run")
     p_run.add_argument("command", nargs=argparse.REMAINDER, help="The command to trace")
 
     # diff
@@ -150,6 +212,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_ver.add_argument("--baseline", "-b", default=".agent/authority-baseline.json", help="Baseline fingerprint")
     p_ver.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
+    # report
+    p_rep = subparsers.add_parser("report", help="Display structured report from a fingerprint JSON")
+    p_rep.add_argument("input", nargs="?", default="agentscope.json", help="Input fingerprint JSON")
+
     return parser
 
 
@@ -166,6 +232,7 @@ def main() -> None:
         "diff": cmd_diff,
         "baseline": cmd_baseline,
         "verify": cmd_verify,
+        "report": cmd_report,
     }
 
     handler = commands.get(args.subcommand)

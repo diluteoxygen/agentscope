@@ -5,7 +5,7 @@ Unit tests for the Normalizer and sensitive resource classifier.
 import unittest
 import tempfile
 from pathlib import Path
-from agentscope.normalizer import Normalizer
+from agentscope.normalizer import Normalizer, coalesce_paths
 
 
 class TestNormalizer(unittest.TestCase):
@@ -79,6 +79,22 @@ class TestNormalizer(unittest.TestCase):
         self.assertEqual(caps.network, ["api.github.com:443"])
         self.assertTrue(any("CI/CD" in s for s in caps.secrets))
         self.assertIn("env:AWS_SECRET_ACCESS_KEY", caps.secrets)
+
+    def test_coalesce_paths(self):
+        paths = [
+            "./src/utils/a.py",
+            "./src/utils/b.py",
+            "./src/utils/c.py",
+            "./src/utils/d.py",
+            "./src/utils/e.py",
+            "./src/main.py",
+            "./package.json",
+        ]
+        coalesced = coalesce_paths(paths, threshold=5)
+        self.assertIn("./src/utils/**", coalesced)
+        self.assertIn("./src/main.py", coalesced)
+        self.assertIn("./package.json", coalesced)
+        self.assertNotIn("./src/utils/a.py", coalesced)
 
 
 if __name__ == "__main__":

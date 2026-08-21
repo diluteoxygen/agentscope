@@ -5,8 +5,9 @@ Normalizer for transforming low-level kernel syscall events into canonical capab
 from __future__ import annotations
 import os
 import re
+from collections import defaultdict
 from pathlib import Path
-from typing import Set, List, Optional, Tuple
+from typing import Set, List, Optional, Tuple, Dict
 from .models import Capabilities, FilesystemCapabilities
 
 # System noise paths to exclude from general authority fingerprinting
@@ -56,10 +57,42 @@ SENSITIVE_ENV_VARS: Set[str] = {
 }
 
 
+def coalesce_paths(paths: List[str], threshold: int = 5) -> List[str]:
+    """
+    Coalesces a list of file paths into directory globs when file count in a directory reaches threshold.
+    """
+    if threshold <= 1:
+        return sorted(list(set(paths)))
+
+    dir_groups: Dict[str, List[str]] = defaultdict(list)
+    top_level_files: List[str] = []
+
+    for p in paths:
+        if "/" in p:
+            parent_dir = str(Path(p).parent)
+            if p.startswith("./") and not parent_dir.startswith("./"):
+                parent_dir = "./" + parent_dir
+            dir_groups[parent_dir].append(p)
+        else:
+            top_level_files.append(p)
+
+    result_paths: Set[str] = set(top_level_files)
+
+    for parent_dir, file_list in dir_groups.items():
+        if len(file_list) >= threshold:
+            glob_path = f"{parent_dir}/**"
+            result_paths.add(glob_path)
+        else:
+            result_paths.update(file_list)
+
+    return sorted(list(result_paths))
+
+
 class Normalizer:
-    def __init__(self, cwd: Optional[str] = None):
+    def __init__(self, cwd: Optional[str] = None, coalesce_threshold: Optional[int] = None):
         self.cwd = Path(cwd).resolve() if cwd else Path.cwd().resolve()
         self.home = Path.home().resolve()
+        self.coalesce_threshold = coalesce_threshold
 
     def is_system_noise(self, path_str: str) -> bool:
         for pat in SYSTEM_NOISE_PATTERNS:
@@ -146,10 +179,17 @@ class Normalizer:
                 if env in SENSITIVE_ENV_VARS:
                     secrets.add(f"env:{env}")
 
+        read_list = sorted(list(reads))
+        write_list = sorted(list(writes))
+
+        if self.coalesce_threshold and self.coalesce_threshold > 1:
+            read_list = coalesce_paths(read_list, threshold=self.coalesce_threshold)
+            write_list = coalesce_paths(write_list, threshold=self.coalesce_threshold)
+
         caps = Capabilities(
             filesystem=FilesystemCapabilities(
-                read=sorted(list(reads)),
-                write=sorted(list(writes))
+                read=read_list,
+                write=write_list
             ),
             commands=sorted(list(commands)),
             network=sorted(list(network)),

@@ -3,6 +3,7 @@ Trace observer for capturing process execution and syscalls on Linux.
 """
 
 from __future__ import annotations
+import codecs
 import os
 import re
 import shutil
@@ -15,6 +16,7 @@ from typing import List, Set, Optional, Tuple, Dict, Any
 
 from .models import CapabilityFingerprint, RunMetadata
 from .normalizer import Normalizer
+from .sni import extract_tls_sni
 
 # Regex patterns for strace parsing
 RE_PID_PREFIX = re.compile(r"^(?:\[pid\s+\d+\]|\d+)\s+")
@@ -31,6 +33,18 @@ RE_CONNECT_IPV4 = re.compile(
 RE_CONNECT_IPV6 = re.compile(
     r'connect\([^,]*,\s*\{sa_family=AF_INET6,\s*sin6_port=htons\(([0-9]+)\),.*?"([^"]+)"'
 )
+
+RE_SEND_BUFFER = re.compile(r'(?:sendto|sendmsg|write)\([0-9]+,\s*"([^"]+)"')
+
+
+def parse_buffer_bytes(escaped_str: str) -> bytes:
+    """
+    Decodes a C-escaped buffer string from strace into raw bytes.
+    """
+    try:
+        return codecs.escape_decode(escaped_str.encode("utf-8"))[0]
+    except Exception:
+        return escaped_str.encode("utf-8", errors="replace")
 
 
 def parse_strace_output(
@@ -99,6 +113,14 @@ def parse_strace_output(
                 except Exception:
                     raw_network.add(f"{ip}:{port}")
 
+        # TLS Client Hello SNI sniffing from send/write buffer
+        m_send = RE_SEND_BUFFER.search(line)
+        if m_send and ("\\x16" in m_send.group(1) or "\\026" in m_send.group(1)):
+            raw_buf = parse_buffer_bytes(m_send.group(1))
+            sni_host = extract_tls_sni(raw_buf)
+            if sni_host:
+                raw_network.add(f"{sni_host}:443")
+
     return raw_reads, raw_writes, raw_commands, raw_network
 
 
@@ -133,8 +155,8 @@ class TraceObserver:
                 "strace",
                 "-f",
                 "-q",
-                "-e", "trace=open,openat,creat,unlink,unlinkat,rename,renameat,renameat2,execve,execveat,connect",
-                "-s", "512",
+                "-e", "trace=open,openat,creat,unlink,unlinkat,rename,renameat,renameat2,execve,execveat,connect,sendto,sendmsg,write",
+                "-s", "1024",
                 "--",
             ] + command
 

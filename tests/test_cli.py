@@ -6,7 +6,7 @@ import unittest
 import tempfile
 import sys
 from pathlib import Path
-from agentscope.cli import build_parser, cmd_run, cmd_baseline, cmd_diff, cmd_verify
+from agentscope.cli import build_parser, cmd_run, cmd_baseline, cmd_diff, cmd_verify, cmd_report
 from agentscope.models import CapabilityFingerprint, Capabilities, FilesystemCapabilities
 
 
@@ -89,6 +89,23 @@ class TestCLI(unittest.TestCase):
         args_diff = parser.parse_args(["diff", str(path_a), str(path_b), "--json"])
         rc_diff = cmd_diff(args_diff)
         self.assertEqual(rc_diff, 0)
+
+    def test_cli_report_command(self):
+        fp_path = self.work_dir / "report_test.json"
+        fp = CapabilityFingerprint(
+            capabilities=Capabilities(
+                filesystem=FilesystemCapabilities(read=["./src/app.py"], write=["./build/out.bin"]),
+                commands=["make"],
+                network=["api.stripe.com:443"],
+                secrets=["env:STRIPE_API_KEY"]
+            )
+        )
+        fp_path.write_text(fp.to_json())
+
+        parser = build_parser()
+        args_rep = parser.parse_args(["report", str(fp_path)])
+        rc_rep = cmd_report(args_rep)
+        self.assertEqual(rc_rep, 0)
 
 
 if __name__ == "__main__":
