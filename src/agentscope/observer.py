@@ -17,6 +17,7 @@ from typing import List, Set, Optional, Tuple, Dict, Any
 from .models import CapabilityFingerprint, RunMetadata
 from .normalizer import Normalizer
 from .sni import extract_tls_sni
+from .auditor import EnvAuditor
 
 # Regex patterns for strace parsing
 RE_PID_PREFIX = re.compile(r"^(?:\[pid\s+\d+\]|\d+)\s+")
@@ -136,7 +137,7 @@ class TraceObserver:
         agent_name: str = "agent"
     ) -> Tuple[CapabilityFingerprint, int]:
         """
-        Runs the command under strace observation and returns (CapabilityFingerprint, exit_code).
+        Runs the command under strace observation and in-process env auditing, returning (CapabilityFingerprint, exit_code).
         """
         start_time = time.time()
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -149,6 +150,9 @@ class TraceObserver:
 
         if command:
             raw_commands.add(command[0])
+
+        auditor = EnvAuditor()
+        injected_env = auditor.get_injected_env()
 
         if self.has_strace:
             trace_cmd = [
@@ -166,7 +170,8 @@ class TraceObserver:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                errors="replace"
+                errors="replace",
+                env=injected_env,
             )
 
             stdout, stderr = proc.communicate()
@@ -184,14 +189,17 @@ class TraceObserver:
                 command,
                 cwd=str(self.cwd),
                 capture_output=True,
-                text=True
+                text=True,
+                env=injected_env,
             )
             exit_code = proc.returncode
 
         duration_ms = int((time.time() - start_time) * 1000)
 
-        for env_k in os.environ.keys():
-            raw_env.add(env_k)
+        # Collect in-process accessed env vars
+        accessed_env_keys = auditor.collect_accessed_keys()
+        auditor.cleanup()
+        raw_env.update(accessed_env_keys)
 
         capabilities = self.normalizer.build_capabilities(
             raw_reads=raw_reads,

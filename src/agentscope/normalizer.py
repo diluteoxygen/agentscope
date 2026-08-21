@@ -20,6 +20,7 @@ SYSTEM_NOISE_PATTERNS = [
     re.compile(r"^/proc/(?:self|$$|[0-9]+)/(?:stat|status|cmdline|environ|maps|fd|task)"),
     re.compile(r"^/proc/(?:cpuinfo|meminfo|version|sys)"),
     re.compile(r"^/sys/(?:devices|bus|class|fs)(/|$)"),
+    re.compile(r"(?:^|/)\.agentscope_env_[^/]+\.log$"),
 ]
 
 # Sensitive paths and classifications
