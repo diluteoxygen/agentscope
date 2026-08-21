@@ -17,6 +17,7 @@ from .wrappers import AGENT_PROFILES, get_agent_profile
 from .visualizer import render_fingerprint_html, render_diff_html
 from .monitor import run_live_monitor
 from .policy import export_docker_flags, export_seccomp_profile, export_bwrap_command
+from .hooks import install_git_hooks, uninstall_git_hooks, check_git_hooks_status
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -267,6 +268,45 @@ def cmd_export_policy(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hook(args: argparse.Namespace) -> int:
+    action = args.hook_action
+    hook_type = args.type or "all"
+    target_hooks = ["pre-commit", "pre-push"] if hook_type in ("all", None) else [hook_type]
+
+    if action == "install":
+        try:
+            res = install_git_hooks(hook_types=target_hooks, force=getattr(args, "force", False))
+            for h, ok in res.items():
+                print(f"[+] Installed Git safety hook: .git/hooks/{h}")
+            return 0
+        except Exception as e:
+            print(f"Error installing git hooks: {e}", file=sys.stderr)
+            return 1
+
+    elif action == "uninstall":
+        try:
+            res = uninstall_git_hooks(hook_types=target_hooks)
+            for h, ok in res.items():
+                if ok:
+                    print(f"[-] Removed Git safety hook: .git/hooks/{h}")
+                else:
+                    print(f"[*] No AgentScope hook found for: .git/hooks/{h}")
+            return 0
+        except Exception as e:
+            print(f"Error uninstalling git hooks: {e}", file=sys.stderr)
+            return 1
+
+    elif action == "status":
+        status_map = check_git_hooks_status(hook_types=target_hooks)
+        print("AgentScope Git Safety Hooks Status:")
+        for h, active in status_map.items():
+            state_str = "✓ INSTALLED" if active else "✗ NOT INSTALLED"
+            print(f"  • {h:<12}: {state_str}")
+        return 0
+
+    return 0
+
+
 def cmd_benchmark(args: argparse.Namespace) -> int:
     config_path = Path(args.config) if getattr(args, "config", None) else None
     if config_path and config_path.exists():
@@ -342,6 +382,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_pol.add_argument("--input", "-i", help="Input baseline or fingerprint JSON")
     p_pol.add_argument("--output", "-o", help="Destination policy output file")
 
+    # hook
+    p_hook = subparsers.add_parser("hook", help="Manage Git safety hooks (pre-commit, pre-push)")
+    p_hook.add_argument("hook_action", choices=["install", "uninstall", "status"], help="Hook action to execute")
+    p_hook.add_argument("--type", choices=["pre-commit", "pre-push", "all"], default="all", help="Target hook type")
+    p_hook.add_argument("--force", action="store_true", help="Overwrite existing hooks")
+
     # report / view
     for cmd_name in ["report", "view"]:
         p_rep = subparsers.add_parser(cmd_name, help="Display structured report from a fingerprint JSON")
@@ -374,6 +420,7 @@ def main() -> None:
         "report": cmd_report,
         "view": cmd_report,
         "export-policy": cmd_export_policy,
+        "hook": cmd_hook,
         "benchmark": cmd_benchmark,
     }
 

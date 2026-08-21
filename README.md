@@ -99,9 +99,15 @@ To export an interactive HTML visual report directly:
 agentscope run --html report.html -- claude code
 ```
 
-agentscope executes the command, traces all spawned child processes, socket connections, and in-process `getenv()` calls via an `LD_PRELOAD` C shim, writing `agentscope.json`.
+### 2. Live real-time terminal TUI monitor
 
-### 2. View structured capability reports
+Watch an agent execute in real-time with live syscall event streaming and dynamic risk scoring:
+
+```bash
+agentscope monitor --agent claude -- claude code
+```
+
+### 3. View structured capability reports
 
 Display a formatted breakdown in the terminal:
 
@@ -115,7 +121,7 @@ Or export a standalone interactive HTML dashboard:
 agentscope view agentscope.json --html report.html
 ```
 
-### 3. Diff two runs
+### 4. Diff two runs
 
 Compare fingerprints from two separate runs in the terminal:
 
@@ -135,7 +141,7 @@ To get machine-readable output for scripts:
 agentscope diff run-183.json run-184.json --json
 ```
 
-### 4. Establish a baseline
+### 5. Establish a baseline
 
 Save the current fingerprint as your repository's committed baseline:
 
@@ -145,7 +151,7 @@ agentscope baseline
 
 This writes `.agent/authority-baseline.json`. Check this file into git.
 
-### 5. Verify in CI
+### 6. Verify in CI
 
 Verify a new run against the committed baseline:
 
@@ -177,7 +183,37 @@ RISK DELTA: CRITICAL
 ============================================================
 ```
 
-### 6. Run authority comparison benchmarks
+### 7. Export hardened sandbox policies
+
+Convert a baseline fingerprint into kernel-level confinement rules:
+
+```bash
+# Export hardened Docker run arguments
+agentscope export-policy --format docker
+
+# Export Docker/Kubernetes Seccomp JSON profile
+agentscope export-policy --format seccomp --output seccomp.json
+
+# Export Bubblewrap (bwrap) sandbox flags
+agentscope export-policy --format bwrap
+```
+
+### 8. Install Git safety hooks
+
+Automatically block commits or pushes when unauthorized agent capability escalations are detected:
+
+```bash
+# Install pre-commit and pre-push hooks
+agentscope hook install
+
+# Check hook status
+agentscope hook status
+
+# Remove hooks
+agentscope hook uninstall
+```
+
+### 9. Run authority comparison benchmarks
 
 Compare the authority footprint of multiple agents on standardized tasks:
 
