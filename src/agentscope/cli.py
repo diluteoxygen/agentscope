@@ -15,6 +15,8 @@ from .diff import diff_fingerprints, format_terminal_diff
 from .benchmark import run_benchmark_suite, BenchmarkSuiteResult
 from .wrappers import AGENT_PROFILES, get_agent_profile
 from .visualizer import render_fingerprint_html, render_diff_html
+from .monitor import run_live_monitor
+from .policy import export_docker_flags, export_seccomp_profile, export_bwrap_command
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -58,6 +60,26 @@ def cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "summary", False):
         print("\n" + render_fingerprint_report(fingerprint))
 
+    return exit_code
+
+
+def cmd_monitor(args: argparse.Namespace) -> int:
+    cmd = args.command
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+
+    if not cmd:
+        print("Error: No command specified to monitor.", file=sys.stderr)
+        return 1
+
+    agent_name = args.agent or "agent"
+    fingerprint, exit_code = run_live_monitor(command=cmd, agent_name=agent_name)
+
+    out_path = Path(args.output or "agentscope.json")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(fingerprint.to_json())
+
+    print(f"[+] Capability Fingerprint saved to: {out_path}")
     return exit_code
 
 
@@ -209,6 +231,42 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_policy(args: argparse.Namespace) -> int:
+    in_path = Path(args.input or ".agent/authority-baseline.json")
+    if not in_path.exists():
+        in_path = Path("agentscope.json")
+
+    if not in_path.exists():
+        print(f"Error: Fingerprint not found at {args.input or in_path}", file=sys.stderr)
+        return 1
+
+    fp = CapabilityFingerprint.from_json(in_path.read_text())
+    fmt = (args.format or "docker").lower()
+
+    if fmt == "docker":
+        flags = export_docker_flags(fp)
+        output_str = " \\\n  ".join(["docker run -it"] + flags)
+    elif fmt == "seccomp":
+        profile = export_seccomp_profile(fp)
+        output_str = json.dumps(profile, indent=2)
+    elif fmt == "bwrap":
+        bwrap_args = export_bwrap_command(fp)
+        output_str = " ".join(bwrap_args)
+    else:
+        print(f"Error: Unknown format '{fmt}'. Choose from 'docker', 'seccomp', 'bwrap'.", file=sys.stderr)
+        return 1
+
+    if args.output:
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(output_str + "\n")
+        print(f"[+] Exported {fmt} security policy to: {out}")
+    else:
+        print(output_str)
+
+    return 0
+
+
 def cmd_benchmark(args: argparse.Namespace) -> int:
     config_path = Path(args.config) if getattr(args, "config", None) else None
     if config_path and config_path.exists():
@@ -254,6 +312,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--html", help="Generate standalone visual HTML report")
     p_run.add_argument("command", nargs=argparse.REMAINDER, help="The command to trace")
 
+    # monitor (Live TUI)
+    p_mon = subparsers.add_parser("monitor", help="Run agent under live real-time terminal TUI dashboard")
+    p_mon.add_argument("--output", "-o", help="Output path for fingerprint JSON (default: agentscope.json)")
+    p_mon.add_argument("--agent", "-a", default="agent", help="Agent identifier (default: agent)")
+    p_mon.add_argument("command", nargs=argparse.REMAINDER, help="The command to trace")
+
     # diff
     p_diff = subparsers.add_parser("diff", help="Diff two capability fingerprints")
     p_diff.add_argument("file_a", help="Baseline fingerprint JSON")
@@ -271,6 +335,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_ver.add_argument("--candidate", "-c", default="agentscope.json", help="Candidate run fingerprint")
     p_ver.add_argument("--baseline", "-b", default=".agent/authority-baseline.json", help="Baseline fingerprint")
     p_ver.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    # export-policy
+    p_pol = subparsers.add_parser("export-policy", help="Export hardened sandbox policy (docker, seccomp, bwrap)")
+    p_pol.add_argument("--format", "-f", choices=["docker", "seccomp", "bwrap"], default="docker", help="Policy export target")
+    p_pol.add_argument("--input", "-i", help="Input baseline or fingerprint JSON")
+    p_pol.add_argument("--output", "-o", help="Destination policy output file")
 
     # report / view
     for cmd_name in ["report", "view"]:
@@ -297,11 +367,13 @@ def main() -> None:
 
     commands = {
         "run": cmd_run,
+        "monitor": cmd_monitor,
         "diff": cmd_diff,
         "baseline": cmd_baseline,
         "verify": cmd_verify,
         "report": cmd_report,
         "view": cmd_report,
+        "export-policy": cmd_export_policy,
         "benchmark": cmd_benchmark,
     }
 
