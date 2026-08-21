@@ -1,69 +1,50 @@
 # agentscope
 
-agentscope traces what an AI coding agent touches during a run (files read and written, commands executed, outbound network destinations, and accessed environment variables). It writes a deterministic JSON fingerprint and lets you diff authority changes between runs, enforce an authority baseline in CI, or actively sandbox/terminate rogue processes in real-time.
+[![CI](https://github.com/diluteoxygen/agentscope/actions/workflows/ci.yml/badge.svg)](https://github.com/diluteoxygen/agentscope/actions)
+[![Release](https://img.shields.io/github/v/release/diluteoxygen/agentscope?color=green)](https://github.com/diluteoxygen/agentscope/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## The problem
+**Local capability fingerprinting, real-time forensic monitoring, and runtime containment for AI coding agents.**
 
-Static analysis cannot predict what an autonomous agent will do once it starts executing shell commands and scripts. Most runtime agent security tools are enterprise SaaS platforms with policy engines and cloud control planes.
+agentscope traces what an AI coding agent touches during a run (files read and written, commands executed, outbound network destinations, and in-process environment variables). It generates deterministic JSON capability fingerprints, visual diff reports, and lets you enforce authority bounds in CI or terminate rogue processes in real time.
 
-agentscope is a local command-line tool. It runs on Linux, captures child process trees and syscalls with `strace` and `/proc`, and generates a plain JSON artifact. You can diff two runs with `agentscope diff`, enforce strict runtime process termination with `agentscope enforce`, or fail pull requests with `agentscope verify` if an agent acquires new capabilities.
+---
 
-## How it looks
+<p align="center">
+  <img src="assets/terminal_monitor.svg" alt="AgentScope Live TUI Forensic Monitor" width="850">
+</p>
 
-```text
-RUN #184
+---
 
-Agent: claude
-Repo: payment-service
-Duration: 11m 42s
+## Supported Agent Environments
 
-AUTHORITY FINGERPRINT
-────────────────────────────
+AgentScope provides pre-configured authority profiles, secret detection rules, and network whitelists for:
+- 🚀 **Google Antigravity (`agy`) / Antigravity IDE / Python SDK** (`--agent antigravity`)
+- 🤖 **Anthropic Claude Code CLI** (`--agent claude`)
+- ⚡ **Cursor IDE Background Agent** (`--agent cursor`)
+- 💻 **Aider AI Pair Programmer** (`--agent aider`)
+- 🌐 **Generic Autonomous Agents / Shell Workloads** (`--agent agent`)
 
-FILES
-  READ
-    ./src/**                 247
-    ~/.config/git/config       1 ⚠
-    ~/.ssh/known_hosts         1
+---
 
-  WRITE
-    ./src/**                  19
-    .github/workflows/ci.yml   1 ⚠
+## Architecture & How It Works
 
-COMMANDS
-  git
-  npm
-  pytest
-  curl                     ⚠ NEW
+AgentScope requires **zero cloud SaaS services** and runs entirely locally on Linux using non-intrusive kernel observability:
 
-NETWORK
-  registry.npmjs.org
-  api.github.com
-  104.x.x.x                ⚠ NEW
+<p align="center">
+  <img src="assets/architecture_diagram.svg" alt="AgentScope Architecture Diagram" width="900">
+</p>
 
-SECRETS
-  GITHUB_TOKEN              touched ⚠
+1. **Process & Syscall Tap**: Uses recursive multi-process `strace -f` and `/proc` to intercept all `open`, `execve`, and socket `connect` calls.
+2. **In-Process Secret Auditor**: Thread-safe `LD_PRELOAD` C shim (`libagentscope_audit.so`) hooks libc `getenv()` to detect secret lookups made inside the interpreter.
+3. **TLS SNI Packet Sniffer**: Binary TLS Client Hello parser extracts outbound domain names (`generativelanguage.googleapis.com:443`, `api.anthropic.com:443`) directly from network buffers.
+4. **Deterministic Normalization**: Strips system library noise and generates sorted, canonical capability schemas.
 
-CAPABILITY DELTA
-────────────────────────────
-
-Previous run:
-  filesystem: repo-only
-  network: github + npm
-  secrets: none
-
-Current run:
-  + ~/.config/git/config
-  + .github/workflows/ci.yml
-  + curl
-  + GITHUB_TOKEN
-
-RISK DELTA: HIGH
-```
+---
 
 ## Installation
 
-Requirements: Linux with Python 3.10+ and `strace`.
+Requirements: Linux with Python 3.10+, `strace`, and `gcc`.
 
 ```bash
 pip install agentscope-forensics
@@ -74,185 +55,82 @@ For local development:
 ```bash
 git clone https://github.com/diluteoxygen/agentscope.git
 cd agentscope
-pip install -e .
+pip install -e .[dev]
 ```
 
-## Usage
+---
+
+## Quickstart & Key Commands
+
+For detailed walkthroughs and usage examples, see **[How to Run & Test AgentScope](docs/RUNNING.md)**.
 
 ### 1. Trace an agent run
 
-Wrap your agent command:
-
 ```bash
-agentscope run -- claude code
+# Trace Google Antigravity
+agentscope run --agent antigravity --summary -- agy "fix the auth token bug"
+
+# Trace Claude Code with interactive HTML report export
+agentscope run --agent claude --html report.html -- claude code
 ```
 
-With an agent profile and immediate summary output:
+### 2. Live multi-pane terminal TUI monitor
+
+Watch child processes, syscall rates, and live activity streams in real time:
 
 ```bash
-agentscope run --agent claude --summary -- claude code
+agentscope monitor --agent antigravity -- agy "refactor tests"
 ```
 
-To export an interactive HTML visual report directly:
+### 3. Active runtime containment & enforcement
+
+Block unauthorized secret access or rogue binary execution with immediate process termination (`SIGKILL`):
 
 ```bash
-agentscope run --html report.html -- claude code
+agentscope enforce --baseline .agent/authority-baseline.json -- agy "run database migration"
 ```
 
-### 2. Active runtime containment & enforcement
-
-Run an agent under strict real-time execution bounds. If the agent attempts to read unauthorized secrets (e.g. `~/.ssh`), write unapproved CI workflows, or spawn untrusted binaries (`curl`), AgentScope terminates the process group immediately with `SIGKILL`:
+### 4. Diff capability changes between runs
 
 ```bash
-agentscope enforce --baseline .agent/authority-baseline.json -- claude code
-```
-
-```text
-============================================================
-🚨 AGENTSCOPE ENFORCEMENT ACTION: PROCESS TERMINATED!
-============================================================
-  • Violation Type:   SECRET_ACCESS
-  • Offending Target: ~/.ssh/id_rsa (SSH Keys & Configuration)
-  • Syscall:          openat(AT_FDCWD, "/home/user/.ssh/id_rsa", O_RDONLY)
-  • Action:           SIGKILL sent to process group
-============================================================
-```
-
-### 3. Live real-time terminal TUI monitor
-
-Watch an agent execute in real-time with live syscall event streaming and dynamic risk scoring:
-
-```bash
-agentscope monitor --agent claude -- claude code
-```
-
-### 4. View structured capability reports
-
-Display a formatted breakdown in the terminal:
-
-```bash
-agentscope report agentscope.json
-```
-
-Or export a standalone interactive HTML dashboard:
-
-```bash
-agentscope view agentscope.json --html report.html
-```
-
-### 5. Diff two runs
-
-Compare fingerprints from two separate runs in the terminal:
-
-```bash
+# Terminal diff
 agentscope diff run-183.json run-184.json
-```
 
-To export an interactive visual diff HTML:
-
-```bash
+# Standalone interactive HTML diff dashboard
 agentscope diff run-183.json run-184.json --html diff.html
 ```
 
-To get machine-readable output for scripts:
+### 5. Establish baseline & verify in CI
 
 ```bash
-agentscope diff run-183.json run-184.json --json
+# Commit baseline
+agentscope baseline --input agentscope.json --output .agent/authority-baseline.json
+
+# Verify in CI
+agentscope verify --baseline .agent/authority-baseline.json --candidate agentscope.json
 ```
 
-### 6. Establish a baseline
-
-Save the current fingerprint as your repository's committed baseline:
+### 6. Install Git safety hooks
 
 ```bash
-agentscope baseline
+# Automatically verify authority before commits & pushes
+agentscope hook install
 ```
 
-This writes `.agent/authority-baseline.json`. Check this file into git.
-
-### 7. Verify in CI
-
-Verify a new run against the committed baseline:
+### 7. Export hardened sandbox policies
 
 ```bash
-agentscope verify
-```
-
-If the agent stayed within its baseline, `agentscope verify` exits with code `0`. If new capabilities or sensitive accesses appear, it prints the delta and exits with code `1`.
-
-```text
-================ AGENTSCOPE CI VERIFICATION ================
-⚠ BUILD FAILED: Unseen capabilities detected!
-
-UNSEEN CAPABILITIES
-────────────────────────────────────────
-SECRETS
-  + env:AWS_SECRET_ACCESS_KEY ⚠
-FILES WRITTEN
-  + .github/workflows/deploy.yml ⚠
-COMMANDS
-  + curl
-NETWORK
-  + api.stripe.com:443 ⚠
-────────────────────────────────────────
-RISK DELTA: CRITICAL
-  • Accessed new secret(s): env:AWS_SECRET_ACCESS_KEY
-  • Modified CI/CD workflow: .github/workflows/deploy.yml
-  • New outbound network destination(s): api.stripe.com:443
-============================================================
-```
-
-### 8. Export hardened sandbox policies
-
-Convert a baseline fingerprint into kernel-level confinement rules:
-
-```bash
-# Export hardened Docker run arguments
+# Generate Docker / Seccomp / Bubblewrap confinement rules
 agentscope export-policy --format docker
-
-# Export Docker/Kubernetes Seccomp JSON profile
 agentscope export-policy --format seccomp --output seccomp.json
-
-# Export Bubblewrap (bwrap) sandbox flags
 agentscope export-policy --format bwrap
 ```
 
-### 9. Install Git safety hooks
-
-Automatically block commits or pushes when unauthorized agent capability escalations are detected:
-
-```bash
-# Install pre-commit and pre-push hooks
-agentscope hook install
-
-# Check hook status
-agentscope hook status
-
-# Remove hooks
-agentscope hook uninstall
-```
-
-### 10. Run authority comparison benchmarks
-
-Compare the authority footprint of multiple agents on standardized tasks:
-
-```bash
-agentscope benchmark
-```
-
-Produces an empirical comparison table:
-
-```text
-| Agent / Model | Files Read | Files Written | Commands | Network Endpoints | Secrets Touched | Risk Rating |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `Claude Code` | 24 | 4 | 3 | 1 | 1 | **LOW** |
-| `Aider` | 18 | 3 | 2 | 1 | 1 | **LOW** |
-| `Untrusted Agent` | 91 | 14 | 5 | 2 | 2 | **CRITICAL** |
-```
+---
 
 ## GitHub Action
 
-Add authority verification to `.github/workflows/ci.yml`:
+Add automatic agent authority gating to `.github/workflows/ci.yml`:
 
 ```yaml
 name: Verify agent authority
@@ -270,18 +148,20 @@ jobs:
           fail-on-escalation: 'true'
 ```
 
-## Fingerprint schema
+---
 
-Fingerprints are written as canonical JSON with sorted arrays:
+## Fingerprint Schema (v1.0)
+
+Fingerprints are emitted as deterministic, sorted canonical JSON:
 
 ```json
 {
   "schema_version": "1.0",
   "metadata": {
-    "agent": "claude",
-    "command": ["claude", "code"],
-    "timestamp": "2026-08-20T21:55:00Z",
-    "duration_ms": 14200,
+    "agent": "antigravity",
+    "command": ["agy", "fix auth token bug"],
+    "timestamp": "2026-08-21T12:00:00Z",
+    "duration_ms": 18400,
     "exit_code": 0,
     "cwd": "/workspace/payment-service"
   },
@@ -289,39 +169,41 @@ Fingerprints are written as canonical JSON with sorted arrays:
     "filesystem": {
       "read": [
         "./src/**",
-        "~/.config/git/config"
+        "~/.gemini/antigravity-cli/**"
       ],
       "write": [
-        "./src/utils.py",
-        ".github/workflows/ci.yml"
+        "./src/services/auth_provider.py",
+        "./tests/test_auth.py"
       ]
     },
     "commands": [
-      "curl",
+      "agy",
       "git",
-      "npm",
       "pytest"
     ],
     "network": [
-      "api.github.com:443",
-      "registry.npmjs.org:443"
+      "generativelanguage.googleapis.com:443"
     ],
     "secrets": [
-      "env:GITHUB_TOKEN"
+      "env:GEMINI_API_KEY"
     ]
   }
 }
 ```
 
-## Architecture and design records
+---
 
-For detailed domain documentation and design rationales, see:
+## Architecture & Design Records
+
+- [How to Run & Verify AgentScope](docs/RUNNING.md)
 - [Domain context and ubiquitous language](CONTEXT.md)
 - [Agent standards](AGENTS.md)
 - [ADR 0001: Linux syscall instrumentation model](docs/adr/0001-linux-syscall-instrumentation-model.md)
 - [ADR 0002: Capability fingerprint schema](docs/adr/0002-capability-fingerprint-schema.md)
 - [ADR 0003: CLI and CI baseline engine](docs/adr/0003-cli-and-ci-baseline-engine.md)
 - [Empirical Agent Authority Comparison](docs/benchmarks/agent-authority-comparison.md)
+
+---
 
 ## License
 

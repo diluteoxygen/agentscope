@@ -17,6 +17,38 @@ class AgentProfile:
 
 
 AGENT_PROFILES: Dict[str, AgentProfile] = {
+    "antigravity": AgentProfile(
+        name="antigravity",
+        description="Google Antigravity (AGY) Autonomous Development Agent",
+        default_executable="agy",
+        known_safe_network=[
+            "generativelanguage.googleapis.com:443",
+            "oauth2.googleapis.com:443",
+            "antigravity.google:443",
+            "cloudresourcemanager.googleapis.com:443",
+        ],
+        sensitive_env_keys=[
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            "ANTIGRAVITY_APP_DATA",
+        ],
+    ),
+    "agy": AgentProfile(
+        name="agy",
+        description="Google Antigravity CLI",
+        default_executable="agy",
+        known_safe_network=[
+            "generativelanguage.googleapis.com:443",
+            "oauth2.googleapis.com:443",
+            "antigravity.google:443",
+        ],
+        sensitive_env_keys=[
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+        ],
+    ),
     "claude": AgentProfile(
         name="claude",
         description="Anthropic Claude Code CLI",

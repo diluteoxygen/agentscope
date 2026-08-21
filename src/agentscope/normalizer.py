@@ -49,6 +49,9 @@ SENSITIVE_ENV_VARS: Set[str] = {
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "ANTIGRAVITY_APP_DATA",
     "STRIPE_API_KEY",
     "STRIPE_SECRET_KEY",
     "SLACK_BOT_TOKEN",
@@ -58,6 +61,7 @@ SENSITIVE_ENV_VARS: Set[str] = {
     "REDIS_URL",
     "SSH_AUTH_SOCK",
 }
+
 
 
 def coalesce_paths(paths: List[str], threshold: int = 5) -> List[str]:
