@@ -14,6 +14,8 @@ from .models import Capabilities, FilesystemCapabilities
 SYSTEM_NOISE_PATTERNS = [
     re.compile(r"^/lib(?:64)?(/|$)"),
     re.compile(r"^/usr/lib(?:64)?(/|$)"),
+    re.compile(r"^/usr/local/lib/python[0-9.]+(/|$)"),
+    re.compile(r"^/opt/hostedtoolcache/Python(/|$)"),
     re.compile(r"^/usr/share/(?:locale|zoneinfo|mime|doc)(/|$)"),
     re.compile(r"^/etc/(?:ld\.so|fonts|localtime|timezone|magic|mime\.types)"),
     re.compile(r"^/dev/(?:null|urandom|random|zero|tty|pts)"),

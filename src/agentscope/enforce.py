@@ -68,16 +68,22 @@ class EnforcementEngine:
         if m_exec:
             cmd_path = m_exec.group(1)
             cmd_name = Path(cmd_path).name
-            if self.allowed_commands and cmd_name not in self.allowed_commands:
-                high_risk = {"curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "bash", "sh", "sudo"}
-                if cmd_name in high_risk or self.strict_mode:
-                    return EnforcementViolation(
-                        pid=pid,
-                        violation_type="UNAUTHORIZED_EXEC",
-                        target=cmd_name,
-                        raw_syscall=clean_line,
-                        action_taken="TERMINATED"
-                    )
+            if self.allowed_commands:
+                # Match exact command or python interpreter variants (python, python3, python3.11, etc.)
+                is_allowed = (
+                    cmd_name in self.allowed_commands or
+                    (cmd_name.startswith("python") and any(c.startswith("python") for c in self.allowed_commands))
+                )
+                if not is_allowed:
+                    high_risk = {"curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "bash", "sh", "sudo"}
+                    if cmd_name in high_risk or self.strict_mode:
+                        return EnforcementViolation(
+                            pid=pid,
+                            violation_type="UNAUTHORIZED_EXEC",
+                            target=cmd_name,
+                            raw_syscall=clean_line,
+                            action_taken="TERMINATED"
+                        )
 
         # 2. Inspect Open / Openat (files & secrets)
         m_open = RE_OPEN.search(clean_line)

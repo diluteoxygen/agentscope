@@ -15,8 +15,16 @@ class TestEnforce(unittest.TestCase):
     def setUp(self):
         self.baseline = CapabilityFingerprint(
             capabilities=Capabilities(
-                filesystem=FilesystemCapabilities(read=["./src/main.py"], write=["./build/bundle.js"]),
-                commands=["git", "npm", "python3"],
+                filesystem=FilesystemCapabilities(
+                    read=[
+                        "./src/main.py",
+                        "/usr/lib/python3/**",
+                        "/usr/local/lib/python3/**",
+                        "/opt/hostedtoolcache/Python/**",
+                    ],
+                    write=["./build/bundle.js"]
+                ),
+                commands=["git", "npm", "python", "python3"],
                 network=["api.github.com:443"],
                 secrets=[]
             )
