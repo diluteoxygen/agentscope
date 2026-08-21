@@ -66,7 +66,7 @@ RISK DELTA: HIGH
 Requirements: Linux with Python 3.10+ and `strace`.
 
 ```bash
-pip install agentscope
+pip install agentscope-forensics
 ```
 
 For local development:
@@ -87,9 +87,23 @@ Wrap your agent command:
 agentscope run -- claude code
 ```
 
-agentscope executes the command, traces all spawned child processes, and writes `agentscope.json` to the current working directory.
+With an agent profile and immediate summary output:
 
-### 2. Diff two runs
+```bash
+agentscope run --agent claude --summary -- claude code
+```
+
+agentscope executes the command, traces all spawned child processes and socket connections, and writes `agentscope.json` to the current working directory.
+
+### 2. View structured capability reports
+
+Display a formatted breakdown of accessed files, commands, network endpoints, and secrets:
+
+```bash
+agentscope report agentscope.json
+```
+
+### 3. Diff two runs
 
 Compare fingerprints from two separate runs:
 
@@ -103,7 +117,7 @@ To get machine-readable output for scripts:
 agentscope diff run-183.json run-184.json --json
 ```
 
-### 3. Establish a baseline
+### 4. Establish a baseline
 
 Save the current fingerprint as your repository's committed baseline:
 
@@ -113,7 +127,7 @@ agentscope baseline
 
 This writes `.agent/authority-baseline.json`. Check this file into git.
 
-### 4. Verify in CI
+### 5. Verify in CI
 
 Verify a new run against the committed baseline:
 
@@ -145,6 +159,24 @@ RISK DELTA: CRITICAL
 ============================================================
 ```
 
+### 6. Run authority comparison benchmarks
+
+Compare the authority footprint of multiple agents on standardized tasks:
+
+```bash
+agentscope benchmark
+```
+
+Produces an empirical comparison table:
+
+```text
+| Agent / Model | Files Read | Files Written | Commands | Network Endpoints | Secrets Touched | Risk Rating |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `Claude Code` | 24 | 4 | 3 | 1 | 1 | **LOW** |
+| `Aider` | 18 | 3 | 2 | 1 | 1 | **LOW** |
+| `Untrusted Agent` | 91 | 14 | 5 | 2 | 2 | **CRITICAL** |
+```
+
 ## GitHub Action
 
 Add authority verification to `.github/workflows/ci.yml`:
@@ -158,15 +190,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: diluteoxygen/agentscope@main
         with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y strace
-          pip install agentscope
-      - name: Run verification
-        run: agentscope verify
+          baseline: '.agent/authority-baseline.json'
+          candidate: 'agentscope.json'
+          fail-on-escalation: 'true'
 ```
 
 ## Fingerprint schema
@@ -202,11 +230,11 @@ Fingerprints are written as canonical JSON with sorted arrays:
       "pytest"
     ],
     "network": [
-      "api.github.com",
-      "registry.npmjs.org"
+      "api.github.com:443",
+      "registry.npmjs.org:443"
     ],
     "secrets": [
-      "GITHUB_TOKEN"
+      "env:GITHUB_TOKEN"
     ]
   }
 }
@@ -220,6 +248,7 @@ For detailed domain documentation and design rationales, see:
 - [ADR 0001: Linux syscall instrumentation model](docs/adr/0001-linux-syscall-instrumentation-model.md)
 - [ADR 0002: Capability fingerprint schema](docs/adr/0002-capability-fingerprint-schema.md)
 - [ADR 0003: CLI and CI baseline engine](docs/adr/0003-cli-and-ci-baseline-engine.md)
+- [Empirical Agent Authority Comparison](docs/benchmarks/agent-authority-comparison.md)
 
 ## License
 
